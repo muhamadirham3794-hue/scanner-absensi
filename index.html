@@ -186,8 +186,9 @@
 
         if (!kelasDipilih) return;
 
-        // Filter siswa yang kelasnya cocok
-        const siswaFiltered = masterSiswa.filter(s => s.kelas === kelasDipilih);
+        // PERBAIKAN: Paksa data menjadi String dan hapus spasi gaib pakai .trim()
+        const siswaFiltered = masterSiswa.filter(s => String(s.kelas).trim() === String(kelasDipilih).trim());
+        
         siswaFiltered.forEach(s => {
             siswaSelect.innerHTML += `<option value="${s.nis}" data-nama="${s.nama}">${s.nama}</option>`;
         });
