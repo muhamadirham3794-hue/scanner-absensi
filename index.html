@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner Absensi Siswa</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; margin: 0; padding: 20px; text-align: center; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #1f2937; margin-bottom: 20px; }
+        input { width: 90%; padding: 10px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 16px; text-align: center; }
+        button { background-color: #3b82f6; color: white; border: none; padding: 12px 20px; width: 100%; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #2563eb; }
+        #scanner-section { display: none; }
+        #reader { width: 100%; margin-top: 15px; }
+        .message { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; display: none; }
+        .success { background-color: #d1fae5; color: #065f46; }
+        .error { background-color: #fee2e2; color: #991b1b; }
+        .loading { background-color: #fef3c7; color: #92400e; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-section">
+        <h2>Login Guru</h2>
+        <p style="color: #4b5563; font-size: 14px;">Masukkan PIN Anda untuk mulai absen</p>
+        <input type="password" id="pin-input" placeholder="Masukkan PIN 6 Angka" autocomplete="off">
+        <button onclick="login()">Masuk Web Scanner</button>
+        <div id="login-msg" class="message"></div>
+    </div>
+
+    <div id="scanner-section">
+        <h2>Scanner Kelas</h2>
+        <p id="guru-name" style="color: #4b5563; font-weight: bold;"></p>
+        <div id="reader"></div>
+        <div id="scan-msg" class="message"></div>
+        <button onclick="logout()" style="background-color: #ef4444; margin-top: 15px;">Keluar</button>
+    </div>
+</div>
+
+<script>
+    // GANTI DENGAN URL GAS LO!
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz_5L_jltURcd34GXu4dXNhzuXEednzOaBPcZcORXXA7CyeD3Yfs30Si9j1y7b2BH-onA/exec"; 
+    
+    let html5QrcodeScanner;
+    let namaGuru = "";
+    let isScanningProcess = false; // Mencegah scan dobel
+
+    function showMessage(elementId, text, type) {
+        const el = document.getElementById(elementId);
+        el.innerText = text;
+        el.className = "message " + type;
+        el.style.display = "block";
+        if (type !== 'loading') {
+            setTimeout(() => { el.style.display = "none"; }, 3000); // Hilang dalam 3 detik
+        }
+    }
+
+    // FUNGSI LOGIN
+    function login() {
+        const pin = document.getElementById("pin-input").value;
+        if (!pin) { alert("PIN tidak boleh kosong!"); return; }
+
+        showMessage("login-msg", "Sedang mengecek PIN...", "loading");
+
+        fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: "login", pin: pin }),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                namaGuru = data.nama_guru;
+                document.getElementById("login-section").style.display = "none";
+                document.getElementById("scanner-section").style.display = "block";
+                document.getElementById("guru-name").innerText = "Halo, " + namaGuru;
+                startScanner(); // Nyalakan kamera
+            } else {
+                showMessage("login-msg", data.message, "error");
+            }
+        })
+        .catch(error => showMessage("login-msg", "Gagal terhubung ke server!", "error"));
+    }
+
+    // FUNGSI SCAN QR
+    function onScanSuccess(decodedText) {
+        if (isScanningProcess) return; // Kalau masih proses kirim data, abaikan scan baru
+        isScanningProcess = true;
+        
+        // Kasih efek suara "beep" sederhana
+        let audio = new Audio('https://www.soundjay.com/buttons/beep-07a.mp3');
+        audio.play().catch(e => console.log("Audio diblokir browser"));
+
+        showMessage("scan-msg", "Mengirim data absen...", "loading");
+
+        fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: "absen", nis: decodedText, nama_guru: namaGuru }),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                showMessage("scan-msg", data.message, "success");
+            } else {
+                showMessage("scan-msg", data.message, "error");
+            }
+            setTimeout(() => { isScanningProcess = false; }, 2000); // Jeda 2 detik sebelum bisa scan lagi
+        })
+        .catch(error => {
+            showMessage("scan-msg", "Gagal terhubung ke server!", "error");
+            setTimeout(() => { isScanningProcess = false; }, 2000);
+        });
+    }
+
+    function startScanner() {
+        html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 10, qrbox: {width: 250, height: 250} }, /* verbose= */ false);
+        html5QrcodeScanner.render(onScanSuccess);
+    }
+
+    function logout() {
+        if(html5QrcodeScanner) {
+            html5QrcodeScanner.clear();
+        }
+        document.getElementById("scanner-section").style.display = "none";
+        document.getElementById("login-section").style.display = "block";
+        document.getElementById("pin-input").value = "";
+        namaGuru = "";
+    }
+</script>
+
+</body>
+</html>
