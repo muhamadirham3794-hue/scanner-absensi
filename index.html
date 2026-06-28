@@ -3,21 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Absensi Guru</title>
+    <title>Sistem Absensi Guru v2</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f3f4f6; margin: 0; padding: 20px; text-align: center; }
         .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         h2 { color: #1f2937; margin-bottom: 20px; }
-        input { width: 90%; padding: 10px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 16px; text-align: center; }
+        input, select { width: 90%; padding: 10px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 16px; text-align: center; }
         button { color: white; border: none; padding: 12px 20px; width: 100%; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
         .btn-primary { background-color: #3b82f6; }
         .btn-success { background-color: #10b981; }
         .btn-purple { background-color: #8b5cf6; }
+        .btn-orange { background-color: #f97316; }
         .btn-danger { background-color: #ef4444; }
         .btn-secondary { background-color: #6b7280; }
         
-        #dashboard-section, #scanner-section, #recap-section { display: none; }
+        #dashboard-section, #scanner-section, #recap-section, #manual-section { display: none; }
         #reader { width: 100%; margin-top: 15px; }
         .message { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; display: none; }
         .success { background-color: #d1fae5; color: #065f46; }
@@ -42,6 +43,7 @@
         <h2>Dashboard Guru</h2>
         <p id="dash-guru-name" style="color: #4b5563; font-weight: bold; margin-bottom: 20px;"></p>
         <button class="btn-success" onclick="showScanner()">📷 Mulai Scan QR</button>
+        <button class="btn-orange" onclick="showManualInput()">📝 Input Manual (Siswa/Izin)</button>
         <button class="btn-purple" onclick="showRecap()">📋 Rekap Absen Hari Ini</button>
         <button class="btn-danger" onclick="logout()">🚪 Keluar</button>
     </div>
@@ -59,15 +61,42 @@
         <div class="rekap-list" id="rekap-data"></div>
         <button class="btn-secondary" onclick="backToDashboard()">⬅️ Kembali ke Dashboard</button>
     </div>
+
+    <div id="manual-section">
+        <h2>Input Absen Manual</h2>
+        <div id="manual-msg" class="message"></div>
+        
+        <label style="display:block; text-align:left; margin-left:18px; font-weight:bold;">Pilih Kelas:</label>
+        <select id="select-kelas" onchange="filterSiswaByKelas()">
+            <option value="">-- Pilih Kelas --</option>
+        </select>
+
+        <label style="display:block; text-align:left; margin-left:18px; font-weight:bold;">Pilih Siswa:</label>
+        <select id="select-siswa">
+            <option value="">-- Pilih Siswa --</option>
+        </select>
+
+        <label style="display:block; text-align:left; margin-left:18px; font-weight:bold;">Keterangan:</label>
+        <select id="select-status">
+            <option value="Hadir">Hadir (Ketinggalan Kartu)</option>
+            <option value="Sakit">Sakit</option>
+            <option value="Izin">Izin</option>
+            <option value="Alfa">Alfa</option>
+        </select>
+
+        <button class="btn-success" onclick="simpanAbsenManual()">Simpan Absen</button>
+        <button class="btn-secondary" onclick="backToDashboard()">⬅️ Kembali</button>
+    </div>
 </div>
 
 <script>
     // MASUKIN URL BARU LO DI SINI!
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbyJ8pcKoLW1AeS9HhZKKXt_9r0Zyq_pVXIeSCn1RstYKaykQbRHzN-h8W_rj3R3ZxCDNg/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbydxqhwh9A52Nsoyn1HXHIlGfeWNMMzxC11udFgVp4GbbvJHqXXZfiliRpVjZV4kEBwNQ/exec"; 
     
     let html5QrcodeScanner;
     let namaGuru = "";
     let isScanningProcess = false;
+    let masterSiswa = []; // Nyimpan data siswa dari server
 
     function showMessage(elementId, text, type) {
         const el = document.getElementById(elementId);
@@ -80,6 +109,7 @@
         document.getElementById("dashboard-section").style.display = "none";
         document.getElementById("scanner-section").style.display = "none";
         document.getElementById("recap-section").style.display = "none";
+        document.getElementById("manual-section").style.display = "none";
         document.getElementById(viewId).style.display = "block";
     }
 
@@ -126,7 +156,80 @@
         });
     }
 
-    // DASHBOARD KE REKAP
+    // LOGIKA ABSEN MANUAL
+    function showManualInput() {
+        switchView("manual-section");
+        showMessage("manual-msg", "Memuat data siswa & kelas...", "loading");
+        
+        fetch(GAS_URL, {
+            method: 'POST', body: JSON.stringify({ action: "get_siswa_manual" }),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }).then(res => res.json()).then(data => {
+            document.getElementById("manual-msg").style.display = "none";
+            if (data.status === "success") {
+                masterSiswa = data.siswa;
+                
+                // Isi Dropdown Kelas
+                let kelasSelect = document.getElementById("select-kelas");
+                kelasSelect.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+                data.kelas.forEach(k => {
+                    kelasSelect.innerHTML += `<option value="${k}">${k}</option>`;
+                });
+            }
+        }).catch(() => showMessage("manual-msg", "Gagal memuat data!", "error"));
+    }
+
+    function filterSiswaByKelas() {
+        const kelasDipilih = document.getElementById("select-kelas").value;
+        let siswaSelect = document.getElementById("select-siswa");
+        siswaSelect.innerHTML = '<option value="">-- Pilih Siswa --</option>';
+
+        if (!kelasDipilih) return;
+
+        // Filter siswa yang kelasnya cocok
+        const siswaFiltered = masterSiswa.filter(s => s.kelas === kelasDipilih);
+        siswaFiltered.forEach(s => {
+            siswaSelect.innerHTML += `<option value="${s.nis}" data-nama="${s.nama}">${s.nama}</option>`;
+        });
+    }
+
+    function simpanAbsenManual() {
+        const selectKelas = document.getElementById("select-kelas").value;
+        const selectSiswa = document.getElementById("select-siswa");
+        const nis = selectSiswa.value;
+        const statusAbsen = document.getElementById("select-status").value;
+
+        if (!selectKelas || !nis) {
+            alert("Harap pilih kelas dan siswa terlebih dahulu!");
+            return;
+        }
+
+        const namaSiswa = selectSiswa.options[selectSiswa.selectedIndex].getAttribute("data-nama");
+        showMessage("manual-msg", "Menyimpan...", "loading");
+
+        fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ 
+                action: "simpan_manual", 
+                nis: nis, 
+                nama: namaSiswa, 
+                kelas: selectKelas, 
+                nama_guru: namaGuru,
+                status_absen: statusAbsen 
+            }),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }).then(res => res.json()).then(data => {
+            if (data.status === "success") {
+                showMessage("manual-msg", data.message, "success");
+                // Reset dropdown siswa setelah berhasil input
+                document.getElementById("select-siswa").value = "";
+            } else {
+                showMessage("manual-msg", data.message, "error");
+            }
+        }).catch(() => showMessage("manual-msg", "Gagal menyimpan data!", "error"));
+    }
+
+    // REKAP
     function showRecap() {
         switchView("recap-section");
         showMessage("recap-msg", "Mengambil data...", "loading");
