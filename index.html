@@ -91,7 +91,7 @@
 
 <script>
     // MASUKIN URL BARU LO DI SINI!
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbw4LIa1fZqHjNqBKe_iUTNc_bhaiU9Eg4g3BmRt4BCIJk_dJKjfWr4K57nNLVfWqv82-g/exec"; 
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzqPpVYT5yikRj7SKO2ZeT5UhiIfkOt6957OyE-lqzbAC8jxUwbwinVnz4F7sbgUDrEfQ/exec"; 
     
     let html5QrcodeScanner;
     let namaGuru = "";
@@ -237,21 +237,31 @@
         document.getElementById("recap-data").innerHTML = "";
 
         fetch(GAS_URL, {
-            method: 'POST', body: JSON.stringify({ action: "rekap", nama_guru: namaGuru }),
+            method: 'POST', body: JSON.stringify({ action: "rekap" }),
             headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         }).then(res => res.json()).then(data => {
             document.getElementById("recap-msg").style.display = "none";
+            
             if (data.status === "success" && data.data.length > 0) {
-                let html = "<ul>";
-                data.data.forEach(siswa => { html += "<li>" + siswa + "</li>"; });
-                html += "</ul>";
-                document.getElementById("recap-data").innerHTML = html;
+                // FILTER DATA DI SISI APLIKASI (Berdasarkan nama guru yang sedang login)
+                const dataFiltered = data.data.filter(item => String(item.guru).trim().toLowerCase() === String(namaGuru).trim().toLowerCase());
+                
+                if (dataFiltered.length > 0) {
+                    let html = "<ul>";
+                    // Kita balik urutannya biar data terbaru muncul paling atas (reverse)
+                    dataFiltered.reverse().forEach(siswa => { 
+                        html += `<li><b>${siswa.nama}</b> (${siswa.kelas}) - <span style="color:#f97316;">[${siswa.status}]</span></li>`; 
+                    });
+                    html += "</ul>";
+                    document.getElementById("recap-data").innerHTML = html;
+                } else {
+                    document.getElementById("recap-data").innerHTML = "<p style='text-align:center;'>Anda belum mengabsen siswa hari ini.</p>";
+                }
             } else {
                 document.getElementById("recap-data").innerHTML = "<p style='text-align:center;'>Belum ada data absen hari ini.</p>";
             }
         }).catch(() => showMessage("recap-msg", "Gagal mengambil data!", "error"));
     }
-
     function backToDashboard() {
         if(html5QrcodeScanner) html5QrcodeScanner.clear();
         switchView("dashboard-section");
