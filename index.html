@@ -3,133 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Absensi Siswa</title>
+    <title>Sistem Absensi Guru</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; margin: 0; padding: 20px; text-align: center; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f3f4f6; margin: 0; padding: 20px; text-align: center; }
         .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         h2 { color: #1f2937; margin-bottom: 20px; }
         input { width: 90%; padding: 10px; margin-bottom: 15px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 16px; text-align: center; }
-        button { background-color: #3b82f6; color: white; border: none; padding: 12px 20px; width: 100%; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #2563eb; }
-        #scanner-section { display: none; }
+        button { color: white; border: none; padding: 12px 20px; width: 100%; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+        .btn-primary { background-color: #3b82f6; }
+        .btn-success { background-color: #10b981; }
+        .btn-purple { background-color: #8b5cf6; }
+        .btn-danger { background-color: #ef4444; }
+        .btn-secondary { background-color: #6b7280; }
+        
+        #dashboard-section, #scanner-section, #recap-section { display: none; }
         #reader { width: 100%; margin-top: 15px; }
         .message { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; display: none; }
         .success { background-color: #d1fae5; color: #065f46; }
         .error { background-color: #fee2e2; color: #991b1b; }
         .loading { background-color: #fef3c7; color: #92400e; }
+        
+        .rekap-list { text-align: left; background: #f9fafb; padding: 15px; border-radius: 5px; max-height: 250px; overflow-y: auto; font-size: 14px; }
+        .rekap-list ul { margin: 0; padding-left: 20px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="login-section">
+    <div id="login-section" style="display: block;">
         <h2>Login Guru</h2>
-        <p style="color: #4b5563; font-size: 14px;">Masukkan PIN Anda untuk mulai absen</p>
         <input type="password" id="pin-input" placeholder="Masukkan PIN 6 Angka" autocomplete="off">
-        <button onclick="login()">Masuk Web Scanner</button>
+        <button class="btn-primary" onclick="login()">Masuk</button>
         <div id="login-msg" class="message"></div>
+    </div>
+
+    <div id="dashboard-section">
+        <h2>Dashboard Guru</h2>
+        <p id="dash-guru-name" style="color: #4b5563; font-weight: bold; margin-bottom: 20px;"></p>
+        <button class="btn-success" onclick="showScanner()">📷 Mulai Scan QR</button>
+        <button class="btn-purple" onclick="showRecap()">📋 Rekap Absen Hari Ini</button>
+        <button class="btn-danger" onclick="logout()">🚪 Keluar</button>
     </div>
 
     <div id="scanner-section">
         <h2>Scanner Kelas</h2>
-        <p id="guru-name" style="color: #4b5563; font-weight: bold;"></p>
         <div id="reader"></div>
         <div id="scan-msg" class="message"></div>
-        <button onclick="logout()" style="background-color: #ef4444; margin-top: 15px;">Keluar</button>
+        <button class="btn-secondary" onclick="backToDashboard()">⬅️ Kembali ke Dashboard</button>
+    </div>
+
+    <div id="recap-section">
+        <h2>Rekap Hari Ini</h2>
+        <div id="recap-msg" class="message"></div>
+        <div class="rekap-list" id="rekap-data"></div>
+        <button class="btn-secondary" onclick="backToDashboard()">⬅️ Kembali ke Dashboard</button>
     </div>
 </div>
 
 <script>
-    // GANTI DENGAN URL GAS LO!
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbz_5L_jltURcd34GXu4dXNhzuXEednzOaBPcZcORXXA7CyeD3Yfs30Si9j1y7b2BH-onA/exec"; 
+    // MASUKIN URL BARU LO DI SINI!
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbyJ8pcKoLW1AeS9HhZKKXt_9r0Zyq_pVXIeSCn1RstYKaykQbRHzN-h8W_rj3R3ZxCDNg/exec"; 
     
     let html5QrcodeScanner;
     let namaGuru = "";
-    let isScanningProcess = false; // Mencegah scan dobel
+    let isScanningProcess = false;
 
     function showMessage(elementId, text, type) {
         const el = document.getElementById(elementId);
-        el.innerText = text;
-        el.className = "message " + type;
-        el.style.display = "block";
-        if (type !== 'loading') {
-            setTimeout(() => { el.style.display = "none"; }, 3000); // Hilang dalam 3 detik
-        }
+        el.innerText = text; el.className = "message " + type; el.style.display = "block";
+        if (type !== 'loading') setTimeout(() => { el.style.display = "none"; }, 3000);
     }
 
-    // FUNGSI LOGIN
+    function switchView(viewId) {
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("dashboard-section").style.display = "none";
+        document.getElementById("scanner-section").style.display = "none";
+        document.getElementById("recap-section").style.display = "none";
+        document.getElementById(viewId).style.display = "block";
+    }
+
+    // LOGIN
     function login() {
         const pin = document.getElementById("pin-input").value;
-        if (!pin) { alert("PIN tidak boleh kosong!"); return; }
-
-        showMessage("login-msg", "Sedang mengecek PIN...", "loading");
+        if (!pin) return;
+        showMessage("login-msg", "Mengecek PIN...", "loading");
 
         fetch(GAS_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: "login", pin: pin }),
+            method: 'POST', body: JSON.stringify({ action: "login", pin: pin }),
             headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        })
-        .then(response => response.json())
-        .then(data => {
+        }).then(res => res.json()).then(data => {
             if (data.status === "success") {
                 namaGuru = data.nama_guru;
-                document.getElementById("login-section").style.display = "none";
-                document.getElementById("scanner-section").style.display = "block";
-                document.getElementById("guru-name").innerText = "Halo, " + namaGuru;
-                startScanner(); // Nyalakan kamera
-            } else {
-                showMessage("login-msg", data.message, "error");
-            }
-        })
-        .catch(error => showMessage("login-msg", "Gagal terhubung ke server!", "error"));
+                document.getElementById("dash-guru-name").innerText = "Halo, " + namaGuru;
+                switchView("dashboard-section");
+            } else showMessage("login-msg", data.message, "error");
+        }).catch(() => showMessage("login-msg", "Error jaringan!", "error"));
     }
 
-    // FUNGSI SCAN QR
-    function onScanSuccess(decodedText) {
-        if (isScanningProcess) return; // Kalau masih proses kirim data, abaikan scan baru
-        isScanningProcess = true;
-        
-        // Kasih efek suara "beep" sederhana
-        let audio = new Audio('https://www.soundjay.com/buttons/beep-07a.mp3');
-        audio.play().catch(e => console.log("Audio diblokir browser"));
+    // DASHBOARD KE SCANNER
+    function showScanner() {
+        switchView("scanner-section");
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+        html5QrcodeScanner.render(onScanSuccess);
+    }
 
-        showMessage("scan-msg", "Mengirim data absen...", "loading");
+    function onScanSuccess(decodedText) {
+        if (isScanningProcess) return;
+        isScanningProcess = true;
+        let audio = new Audio('https://www.soundjay.com/buttons/beep-07a.mp3'); audio.play().catch(e=>{});
+        showMessage("scan-msg", "Mengirim data...", "loading");
 
         fetch(GAS_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: "absen", nis: decodedText, nama_guru: namaGuru }),
+            method: 'POST', body: JSON.stringify({ action: "absen", nis: decodedText, nama_guru: namaGuru }),
             headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === "success") {
-                showMessage("scan-msg", data.message, "success");
-            } else {
-                showMessage("scan-msg", data.message, "error");
-            }
-            setTimeout(() => { isScanningProcess = false; }, 2000); // Jeda 2 detik sebelum bisa scan lagi
-        })
-        .catch(error => {
-            showMessage("scan-msg", "Gagal terhubung ke server!", "error");
+        }).then(res => res.json()).then(data => {
+            showMessage("scan-msg", data.message, data.status === "success" ? "success" : "error");
+            setTimeout(() => { isScanningProcess = false; }, 2000);
+        }).catch(() => {
+            showMessage("scan-msg", "Error jaringan!", "error");
             setTimeout(() => { isScanningProcess = false; }, 2000);
         });
     }
 
-    function startScanner() {
-        html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", { fps: 10, qrbox: {width: 250, height: 250} }, /* verbose= */ false);
-        html5QrcodeScanner.render(onScanSuccess);
+    // DASHBOARD KE REKAP
+    function showRecap() {
+        switchView("recap-section");
+        showMessage("recap-msg", "Mengambil data...", "loading");
+        document.getElementById("recap-data").innerHTML = "";
+
+        fetch(GAS_URL, {
+            method: 'POST', body: JSON.stringify({ action: "rekap", nama_guru: namaGuru }),
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }).then(res => res.json()).then(data => {
+            document.getElementById("recap-msg").style.display = "none";
+            if (data.status === "success" && data.data.length > 0) {
+                let html = "<ul>";
+                data.data.forEach(siswa => { html += "<li>" + siswa + "</li>"; });
+                html += "</ul>";
+                document.getElementById("recap-data").innerHTML = html;
+            } else {
+                document.getElementById("recap-data").innerHTML = "<p style='text-align:center;'>Belum ada data absen hari ini.</p>";
+            }
+        }).catch(() => showMessage("recap-msg", "Gagal mengambil data!", "error"));
+    }
+
+    function backToDashboard() {
+        if(html5QrcodeScanner) html5QrcodeScanner.clear();
+        switchView("dashboard-section");
     }
 
     function logout() {
-        if(html5QrcodeScanner) {
-            html5QrcodeScanner.clear();
-        }
-        document.getElementById("scanner-section").style.display = "none";
-        document.getElementById("login-section").style.display = "block";
         document.getElementById("pin-input").value = "";
         namaGuru = "";
+        switchView("login-section");
     }
 </script>
 
